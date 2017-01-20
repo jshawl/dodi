@@ -1,26 +1,59 @@
 var dns = require("dns")
 var request = require("request")
-var env = require("./env")
+var config = require("./config.js")
+const url = 'https://api.digitalocean.com/v2'
 
-dns.resolve(env.domainName, function(err,ip){
-  request("http://ipv4bot.whatismyipaddress.com/", function(err, res, body){
-    ip[0] !== body ? updateIp(body) : process.exit();
+if(!config.domains){
+  console.log('Missing a list of domains in config.js')
+  process.exit()
+}
+if(!config.token){
+  console.log('Missing token in config.js')
+}
+
+config.domains.forEach(domain => {
+  dns.resolve(domain, function(err,ip){
+    request("http://ipv4bot.whatismyipaddress.com/", function(err, res, body){
+      if(ip[0] !== body)
+        getARecord(domain, A => {
+          upsert(A, ip[0], domain, (err, res, body) => {
+            console.log(body)
+          })
+        })
+    })
   })
 })
 
-var apiUrl = "https://api.digitalocean.com/v2/domains/" + env.domainName + "/records/" + env.recordId
-function updateIp(ip){
-  request.put(apiUrl, {
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + env.token
-    },
-    form: {
-      type: "A",
-      name: "@",
-      data: ip
-    }
-  },function(err, res, body){
-    console.log(body)
+function upsert(A, ip, domain, callback){
+  var form = {
+    type: "A",
+    name: "@",
+    data: ip
+  }
+  if(!A){
+    req('post',`${url}/domains/${domain}/records`, callback, form)
+  } else {
+    req('put',`${url}/domains/${domain}/records/${A.id}`, callback, form)
+  }
+}
+
+function getARecord(domain, callback){
+  req('get', `${url}/domains/${domain}/records`, (err, res, body) => {
+    callback(body.domain_records.filter(record => {
+      return record.type == "A" && record.name == "@"
+    })[0])
   })
+}
+
+function req(method, url, callback, form){
+    var payload = {
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + config.token
+      }
+    }
+    if(form)
+      payload.form = form
+    console.log(form)
+    request[method](url, payload, (err, res, body) => { callback(err, res, JSON.parse(body))})
 }
