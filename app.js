@@ -12,12 +12,18 @@ if(!config.token){
 }
 
 config.domains.forEach(domain => {
+  console.log("Resolving ip for " + domain)
   dns.resolve(domain, function(err,ip){
+    console.log(`${domain}'s IP address is ${ip[0]}`)
+    console.log("Getting your current ip address")
     request("http://ipv4bot.whatismyipaddress.com/", function(err, res, body){
+      console.log(`Current IP address is ${body}`)
       if(ip[0] !== body)
+        console.log('IP mismatch.')
         getARecord(domain, A => {
-          upsert(A, ip[0], domain, (err, res, body) => {
-            console.log(body)
+          console.log(`got ${A} for ${domain}`)
+          upsert(A, body, domain, (err, res, body) => {
+            console.log(domain, body)
           })
         })
     })
@@ -30,6 +36,7 @@ function upsert(A, ip, domain, callback){
     name: "@",
     data: ip
   }
+  console.log(`Updating ${domain} with IP ${ip}`)
   if(!A){
     req('post',`${url}/domains/${domain}/records`, callback, form)
   } else {
@@ -54,6 +61,5 @@ function req(method, url, callback, form){
     }
     if(form)
       payload.form = form
-    console.log(form)
     request[method](url, payload, (err, res, body) => { callback(err, res, JSON.parse(body))})
 }
